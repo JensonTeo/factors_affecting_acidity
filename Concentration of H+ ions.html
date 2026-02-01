@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Acid H+ Concentration Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --secondary: #64748b;
+            --h-ion: #ff4d4d;
+            --anion: #fbbf24;
+            --molecule: #94a3b8;
+            --water: #0ea5e9;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            touch-action: manipulation;
+            background-color: #f8fafc;
+        }
+
+        .beaker-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            background: white;
+            border: 4px solid #334155;
+            border-top: none;
+            border-radius: 0 0 20px 20px;
+            overflow: hidden;
+            box-shadow: inset 0 -10px 20px rgba(0,0,0,0.05);
+        }
+
+        .water-level {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(to bottom, #e0f2fe 0%, #bae6fd 100%);
+            transition: height 0.5s ease-out;
+            z-index: 1;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        .control-panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+
+        .log-panel {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11px;
+            max-height: 150px;
+            overflow-y: auto;
+            background: #1e293b;
+            color: #cbd5e1;
+        }
+
+        .btn-touch {
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        input[type="range"] {
+            height: 44px;
+            width: 100%;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px;
+        }
+
+        .log-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+        .log-panel::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-6">
+
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-6">
+            <h1 class="text-2xl font-bold text-slate-800">Factors affecting concentration of H<sup>+</sup> ions in acid</h1>
+            <p class="text-slate-600 italic">Task: Set the conditions of the acid on the left and add the acid molecules into water. Observe the numerical data below carefully</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Controls (Left Side) -->
+            <div class="lg:col-span-4 control-panel p-4 space-y-5 order-2 lg:order-1">
+                
+                <!-- 1. Concentration -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">
+                        🧪 Acid concentration: <span id="concVal" class="text-blue-600">0.100</span> mol/dm³
+                    </label>
+                    <input type="range" id="concSlider" min="0.01" max="0.20" value="0.10" step="0.01">
+                    <div class="flex justify-between text-[10px] text-slate-400 uppercase font-bold">
+                        <span>Dilute</span>
+                        <span>Concentrated</span>
+                    </div>
+                </div>
+
+                <!-- 2. Strength -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">
+                        ⚡ Acid strength
+                    </label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="setStrength('strong')" id="btnStrong" class="btn-touch px-3 py-1 rounded-lg border-2 border-blue-600 bg-blue-50 text-blue-700 font-medium text-sm">Strong acid</button>
+                        <button onclick="setStrength('weak')" id="btnWeak" class="btn-touch px-3 py-1 rounded-lg border-2 border-slate-200 hover:bg-slate-50 text-slate-600 font-medium text-sm">Weak acid</button>
+                    </div>
+                </div>
+
+                <!-- 3. Basicity -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">
+                        ⚗️ Basicity
+                    </label>
+                    <select id="basicitySelect" class="w-full h-11 px-3 rounded-lg border-2 border-slate-200 focus:border-blue-500 outline-none text-sm">
+                        <option value="1">Monobasic</option>
+                        <option value="2">Dibasic</option>
+                        <option value="3">Tribasic</option>
+                    </select>
+                </div>
+
+                <!-- Add Acid Action -->
+                <div class="pt-2">
+                    <button id="addAcidBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-md active:scale-95 mb-3">
+                        ➕ Add acid into water
+                    </button>
+                    <button id="addWaterBtn" class="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 rounded-xl transition-all shadow-md active:scale-95">
+                        💧 Add water (Dilution)
+                    </button>
+                </div>
+
+                <button onclick="resetSim()" class="w-full border-2 border-slate-300 text-slate-600 font-bold py-2 rounded-lg hover:bg-slate-50 text-sm">
+                    🔄 Reset simulation
+                </button>
+
+                <!-- Legend -->
+                <div class="pt-4 border-t border-slate-100 flex flex-wrap gap-3 text-[11px]">
+                    <span><span class="legend-dot" style="background: var(--h-ion)"></span>H<sup>+</sup> ion</span>
+                    <span><span class="legend-dot" style="background: var(--anion)"></span>Anion</span>
+                    <span><span class="legend-dot" style="background: var(--molecule)"></span>Acid molecule</span>
+                </div>
+            </div>
+
+            <!-- Simulation View (Right Side) -->
+            <div class="lg:col-span-8 space-y-4 order-1 lg:order-2">
+                <div class="beaker-container" id="beaker">
+                    <div id="waterLevel" class="water-level" style="height: 50%;"></div>
+                    <canvas id="simCanvas"></canvas>
+                </div>
+
+                <!-- Stats Dashboard -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="bg-blue-50 p-3 rounded-xl border border-blue-100 flex flex-col justify-center items-center">
+                        <div class="text-[10px] text-blue-600 font-bold text-center">concentration of H<sup>+</sup> ions</div>
+                        <div class="text-2xl font-black text-blue-800">
+                            <span id="hConcVal">0.000</span> <span class="text-sm font-bold">mol/dm³</span>
+                        </div>
+                    </div>
+                    <div id="phBox" class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col justify-center items-center transition-colors duration-500">
+                        <div class="text-[10px] text-slate-600 font-bold">pH</div>
+                        <div id="phValue" class="text-2xl font-black text-slate-800">7.0</div>
+                    </div>
+                    <div class="bg-amber-50 p-3 rounded-xl border border-amber-100 flex flex-col justify-center items-start px-4">
+                        <div class="w-full text-center mb-1">
+                            <div class="text-[10px] text-amber-600 font-bold uppercase">Extent of ionisation</div>
+                        </div>
+                        <div class="text-[11px] text-amber-800 leading-tight">
+                            Number of HA molecules initially: <span id="haInitial" class="font-bold">0</span><br>
+                            Number of H<sup>+</sup> ion in water: <span id="hFinal" class="font-bold">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Explanation Box -->
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                    <h3 class="font-bold text-slate-800 text-sm mb-1">Observation:</h3>
+                    <p id="conceptText" class="text-sm text-slate-600">
+                        Acid molecules are currently outside the water. Click 'Add acid into water' to observe ionisation.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Panel -->
+        <div class="mt-8">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-md font-bold text-slate-800 flex items-center">
+                    📊 Student action log 
+                </h2>
+                <button onclick="clearLog()" class="text-xs text-red-500 hover:underline">Clear analytics</button>
+            </div>
+            <div id="analyticsLog" class="log-panel p-4 rounded-lg shadow-inner">
+                <div class="opacity-50">🕒 Waiting for interaction...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const startTime = Date.now();
+        
+        let state = {
+            concentration: 0.10, 
+            strength: 'strong', 
+            basicity: 1,
+            volume: 50, 
+            particles: [],
+            isAdded: false,
+            hConcentration: 0,
+            initialMoleculeCount: 0
+        };
+
+        const config = {
+            particleRadius: 10,
+            strongIonization: 1.0,
+            weakIonization: 0.3,
+            speed: 1.2 
+        };
+
+        class Particle {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * config.speed;
+                this.vy = (Math.random() - 0.5) * config.speed;
+                this.type = type; 
+                this.inWater = false;
+            }
+
+            update(width, height, waterHeight) {
+                const waterTop = height - waterHeight;
+                
+                if (state.isAdded && !this.inWater) {
+                    this.y += 4;
+                    if (this.y > waterTop + config.particleRadius) {
+                        this.inWater = true;
+                        if (this.type === 'Molecule') {
+                            triggerIonization(this);
+                        }
+                    }
+                }
+
+                if (this.inWater || !state.isAdded) {
+                    this.x += this.vx;
+                    this.y += this.vy;
+
+                    const topLimit = this.inWater ? waterTop : 0;
+                    const bottomLimit = this.inWater ? height : waterTop;
+
+                    if (this.x < config.particleRadius || this.x > width - config.particleRadius) this.vx *= -1;
+                    if (this.y < topLimit + config.particleRadius || this.y > bottomLimit - config.particleRadius) this.vy *= -1;
+                }
+
+                this.x = Math.max(config.particleRadius, Math.min(width - config.particleRadius, this.x));
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, config.particleRadius, 0, Math.PI * 2);
+                
+                if (this.type === 'H') ctx.fillStyle = '#ff4d4d';
+                else if (this.type === 'Anion') ctx.fillStyle = '#fbbf24';
+                else ctx.fillStyle = '#94a3b8';
+                
+                ctx.fill();
+                
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 9px Arial';
+                ctx.textAlign = 'center';
+                if (this.type === 'H') {
+                    // Draw H+ with superscript +
+                    ctx.fillText('H', this.x - 2, this.y + 3);
+                    ctx.font = 'bold 7px Arial';
+                    ctx.fillText('+', this.x + 5, this.y - 1);
+                }
+                else if (this.type === 'Anion') ctx.fillText('A-', this.x, this.y + 3);
+                else ctx.fillText('HA', this.x, this.y + 3);
+            }
+        }
+
+        function initCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+
+        function createParticles() {
+            state.particles = [];
+            // REMOVED: state.isAdded = false; (This line caused the reset behavior)
+            
+            const count = Math.max(4, Math.ceil(state.concentration * 400)); 
+            state.initialMoleculeCount = count;
+            
+            const waterHeight = (state.volume / 100) * canvas.height;
+            const topBoundary = canvas.height - waterHeight;
+
+            for (let i = 0; i < count; i++) {
+                if (!state.isAdded) {
+                    // Original behavior: Generate above water
+                    const x = (canvas.width / count) * i + (Math.random() * 20);
+                    const y = Math.random() * (topBoundary - 40) + 20;
+                    state.particles.push(new Particle(x, y, 'Molecule'));
+                } else {
+                    // New behavior: Generate directly in water (Instant update)
+                    const x = Math.random() * (canvas.width - 20) + 10;
+                    const y = topBoundary + Math.random() * (waterHeight - 20) + 10;
+                    
+                    const isIonized = state.strength === 'strong' ? true : (Math.random() < config.weakIonization);
+                    
+                    if (isIonized) {
+                        const a = new Particle(x, y, 'Anion');
+                        a.inWater = true;
+                        state.particles.push(a);
+                        for(let j=0; j < state.basicity; j++) {
+                            const h = new Particle(x + (Math.random()*10 - 5), y + (Math.random()*10 - 5), 'H');
+                            h.inWater = true;
+                            state.particles.push(h);
+                        }
+                    } else {
+                        const m = new Particle(x, y, 'Molecule');
+                        m.inWater = true;
+                        state.particles.push(m);
+                    }
+                }
+            }
+            updateStats();
+        }
+
+        function triggerIonization(p) {
+            const idx = state.particles.indexOf(p);
+            if (idx > -1) {
+                state.particles.splice(idx, 1);
+                const isIonized = state.strength === 'strong' ? true : (Math.random() < config.weakIonization);
+                
+                if (isIonized) {
+                    const a = new Particle(p.x, p.y, 'Anion');
+                    a.inWater = true;
+                    state.particles.push(a);
+                    for(let j=0; j < state.basicity; j++) {
+                        const h = new Particle(p.x + (Math.random()*20 - 10), p.y + (Math.random()*20 - 10), 'H');
+                        h.inWater = true;
+                        state.particles.push(h);
+                    }
+                } else {
+                    const m = new Particle(p.x, p.y, 'Molecule');
+                    m.inWater = true;
+                    state.particles.push(m);
+                }
+            }
+            updateStats();
+        }
+
+        function updateStats() {
+            const alpha = state.strength === 'strong' ? 1.0 : 0.3;
+            
+            let actualHConc = 0;
+            if (state.isAdded) {
+                const dilutionFactor = 50 / state.volume;
+                actualHConc = state.concentration * state.basicity * alpha * dilutionFactor;
+            }
+
+            document.getElementById('hConcVal').innerText = actualHConc.toFixed(3);
+            document.getElementById('concVal').innerText = state.concentration.toFixed(3);
+            
+            // Reflect numbers in Extent of ionisation
+            document.getElementById('haInitial').innerText = state.initialMoleculeCount;
+            const hIonsInWater = state.particles.filter(p => p.type === 'H' && p.inWater).length;
+            document.getElementById('hFinal').innerText = hIonsInWater;
+
+            let ph = 7.0;
+            if (actualHConc > 0) {
+                ph = -Math.log10(actualHConc);
+                ph = Math.max(0, Math.min(7, ph));
+            }
+            
+            const phDisplay = document.getElementById('phValue');
+            const phBox = document.getElementById('phBox');
+            phDisplay.innerText = ph.toFixed(1);
+
+            if (ph <= 2) {
+                phBox.style.backgroundColor = '#ef4444'; 
+                phBox.style.borderColor = '#b91c1c';
+                phDisplay.style.color = 'white';
+            } else if (ph <= 4) {
+                phBox.style.backgroundColor = '#f97316'; 
+                phBox.style.borderColor = '#c2410c';
+                phDisplay.style.color = 'white';
+            } else if (ph < 6) {
+                phBox.style.backgroundColor = '#facc15'; 
+                phBox.style.borderColor = '#a16207';
+                phDisplay.style.color = 'black';
+            } else if (ph < 7) {
+                phBox.style.backgroundColor = '#bef264'; 
+                phBox.style.borderColor = '#4d7c0f';
+                phDisplay.style.color = 'black';
+            } else {
+                phBox.style.backgroundColor = '#f8fafc'; 
+                phBox.style.borderColor = '#e2e8f0';
+                phDisplay.style.color = '#1e293b';
+            }
+
+            let txt = "Molecules are outside the water. Click 'Add acid' to start.";
+            if (state.isAdded) {
+                if (state.strength === 'weak') {
+                    txt = `This is a weak acid with 30% ionisation. Only some molecules ionise to release H⁺ ions.`;
+                } else {
+                    txt = `This is a strong acid. All molecules fully ionise to release H⁺ ions.`;
+                }
+            }
+            document.getElementById('conceptText').innerText = txt;
+        }
+
+        function logAction(action, detail) {
+            const log = document.getElementById('analyticsLog');
+            if (log.children.length === 1 && log.innerText.includes('Waiting')) log.innerHTML = '';
+            const time = Math.floor((Date.now() - startTime) / 1000);
+            const entry = document.createElement('div');
+            entry.className = 'mb-1 border-b border-slate-700 pb-1';
+            entry.innerHTML = `
+                <span class="text-blue-400">[t=${time}s]</span> 
+                <span class="text-white font-bold">${detail}</span>
+                <span class="text-[10px] text-slate-500 ml-2">pH: ${document.getElementById('phValue').innerText}</span>
+            `;
+            log.prepend(entry);
+        }
+
+        function setStrength(s) {
+            state.strength = s;
+            document.getElementById('btnStrong').className = s === 'strong' 
+                ? 'btn-touch px-3 py-1 rounded-lg border-2 border-blue-600 bg-blue-50 text-blue-700 font-medium text-sm' 
+                : 'btn-touch px-3 py-1 rounded-lg border-2 border-slate-200 text-slate-600 font-medium text-sm';
+            document.getElementById('btnWeak').className = s === 'weak' 
+                ? 'btn-touch px-3 py-1 rounded-lg border-2 border-blue-600 bg-blue-50 text-blue-700 font-medium text-sm' 
+                : 'btn-touch px-3 py-1 rounded-lg border-2 border-slate-200 text-slate-600 font-medium text-sm';
+            
+            logAction('click', `Set strength to ${s}`);
+            createParticles();
+        }
+
+        document.getElementById('concSlider').addEventListener('input', (e) => {
+            state.concentration = parseFloat(e.target.value);
+            updateStats();
+        });
+
+        document.getElementById('concSlider').addEventListener('change', (e) => {
+            logAction('change', `Concentration set to ${state.concentration}`);
+            createParticles();
+        });
+
+        document.getElementById('basicitySelect').addEventListener('change', (e) => {
+            state.basicity = parseInt(e.target.value);
+            logAction('change', `Basicity changed to ${state.basicity}`);
+            createParticles();
+        });
+
+        document.getElementById('addAcidBtn').addEventListener('click', () => {
+            if (!state.isAdded) {
+                state.isAdded = true;
+                logAction('click', 'Added acid into water');
+                updateStats();
+            }
+        });
+
+        document.getElementById('addWaterBtn').addEventListener('click', () => {
+            if (state.volume < 90) {
+                state.volume += 10;
+                document.getElementById('waterLevel').style.height = state.volume + '%';
+                logAction('click', `Added water. Volume increased to ${state.volume}%`);
+                updateStats();
+            }
+        });
+
+        function resetSim() {
+            state.volume = 50;
+            state.concentration = 0.10;
+            state.basicity = 1;
+            state.isAdded = false; // Explicitly reset added state here
+            document.getElementById('concSlider').value = 0.10;
+            document.getElementById('basicitySelect').value = 1;
+            document.getElementById('waterLevel').style.height = '50%';
+            setStrength('strong');
+            logAction('reset', 'Simulation reset');
+        }
+
+        function clearLog() {
+            document.getElementById('analyticsLog').innerHTML = '';
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const waterHeight = (state.volume / 100) * canvas.height;
+            state.particles.forEach(p => {
+                p.update(canvas.width, canvas.height, waterHeight);
+                p.draw();
+            });
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', initCanvas);
+        window.onload = () => {
+            initCanvas();
+            createParticles();
+            animate();
+            logAction('system', 'Lab ready');
+        };
+    </script>
+</body>
+</html>
